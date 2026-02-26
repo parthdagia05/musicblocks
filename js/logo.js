@@ -18,7 +18,9 @@
    instrumentsEffects, Singer, Tone, CAMERAVALUE, doUseCamera,
    VIDEOVALUE, last, getIntervalDirection, getIntervalNumber,
    mixedNumber, rationalToFraction, doStopVideoCam, StatusMatrix,
-   getStatsFromNotation, delayExecution, DEFAULTVOICE
+   getStatsFromNotation, delayExecution, DEFAULTVOICE,
+   isPerformanceEnabled, startPerformanceTracking, endPerformanceTracking,
+   enterExecutionScope, exitExecutionScope
 */
 
 /*
@@ -681,9 +683,8 @@ class Logo {
                     ) {
                         logo.statusFields.push([blk, "color"]);
                     } else {
-                        logo.blockList[blk].value = logo.activity.turtles.getTurtle(
-                            turtle
-                        ).painter.color;
+                        logo.blockList[blk].value =
+                            logo.activity.turtles.getTurtle(turtle).painter.color;
                     }
                     break;
 
@@ -1015,6 +1016,11 @@ class Logo {
      * @returns {void}
      */
     runLogoCommands(startHere, env) {
+        // Performance instrumentation: begin tracking if enabled.
+        if (typeof isPerformanceEnabled === "function" && isPerformanceEnabled()) {
+            startPerformanceTracking();
+        }
+
         this._prematureRestart = this._alreadyRunning;
         if (this._alreadyRunning && this._runningBlock !== null) {
             this._ignoringBlock = this._runningBlock;
@@ -1319,6 +1325,12 @@ class Logo {
      * @returns {void}
      */
     runFromBlockNow(logo, turtle, blk, isflow, receivedArg, queueStart) {
+        // Performance instrumentation: track execution depth.
+        const _perfEnabled = typeof isPerformanceEnabled === "function" && isPerformanceEnabled();
+        if (_perfEnabled) {
+            enterExecutionScope();
+        }
+
         this._alreadyRunning = true;
 
         this.receivedArg = receivedArg;
@@ -1470,7 +1482,13 @@ class Logo {
                 const [cf, cfc, ret] = res;
                 if (cf !== undefined) childFlow = cf;
                 if (cfc !== undefined) childFlowCount = cfc;
-                if (ret) return ret;
+                if (ret) {
+                    // Performance instrumentation: exit scope on early return.
+                    if (_perfEnabled) {
+                        exitExecutionScope();
+                    }
+                    return ret;
+                }
             }
         } else {
             if (
@@ -1640,12 +1658,22 @@ class Logo {
                 }
             }
 
+            // Performance instrumentation: exit scope before handing off to next block.
+            if (_perfEnabled) {
+                exitExecutionScope();
+            }
+
             if (isflow) {
                 logo.runFromBlockNow(logo, turtle, nextBlock, isflow, passArg, queueStart);
             } else {
                 logo.runFromBlock(logo, turtle, nextBlock, isflow, passArg);
             }
         } else {
+            // Performance instrumentation: exit scope at terminal block.
+            if (_perfEnabled) {
+                exitExecutionScope();
+            }
+
             logo._alreadyRunning = false;
 
             if (!logo._prematureRestart) {
@@ -1694,6 +1722,11 @@ class Logo {
                     queueStart === 0 &&
                     tur.singer.justCounting.length === 0
                 ) {
+                    // Performance instrumentation: log stats when all turtles finish.
+                    if (typeof isPerformanceEnabled === "function" && isPerformanceEnabled()) {
+                        endPerformanceTracking();
+                    }
+
                     if (logo.runningLilypond) {
                         if (logo.collectingStats) {
                             // console.debug("stats collection completed");
