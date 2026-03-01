@@ -181,6 +181,34 @@ function lazyLoad(modulePaths) {
     });
 }
 
+if (_THIS_IS_MUSIC_BLOCKS_) {
+    const MUSICBLOCKS_EXTRAS = [
+        "widgets/modewidget",
+        "widgets/meterwidget",
+        "widgets/PhraseMakerUtils",
+        "widgets/PhraseMakerGrid",
+        "widgets/PhraseMakerUI",
+        "widgets/PhraseMakerAudio",
+        "widgets/phrasemaker",
+        "widgets/arpeggio",
+        "widgets/aiwidget",
+        "widgets/aidebugger",
+        "widgets/pitchdrummatrix",
+        "widgets/rhythmruler",
+        "widgets/pitchstaircase",
+        "widgets/temperament",
+        "widgets/tempo",
+        "widgets/pitchslider",
+        "widgets/musickeyboard",
+        "widgets/timbre",
+        "widgets/oscilloscope",
+        "widgets/sampler",
+        "widgets/reflection",
+        "widgets/legobricks"
+    ];
+    MYDEFINES = MYDEFINES.concat(MUSICBLOCKS_EXTRAS);
+}
+
 // Module-scoped singleton reference to the active Activity instance.
 // • Used by plugins (weather.rtp, etc.) that are eval()'d inside this module's
 //   closure scope and therefore can close over `globalActivity` directly.
@@ -1531,7 +1559,9 @@ class Activity {
             importConfirm.textContent = _("Confirm");
             importConfirm.addEventListener("click", () => {
                 const maxNoteBlocks = select.value;
-                transcribeMidi(midi, maxNoteBlocks);
+                require(["activity/midi"], function () {
+                    transcribeMidi(midi, maxNoteBlocks);
+                });
                 document.body.removeChild(modal);
             });
             modal.appendChild(importConfirm);

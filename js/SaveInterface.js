@@ -533,6 +533,7 @@ class SaveInterface {
         document.body.style.cursor = "wait";
 
         // Lazy-load abc module before using ABCHEADER
+
         _lazyRequire(["activity/abc"], function () {
             // Check if we have buffered notation data (Issue #2330)
             if (activity.logo.recordingBuffer.hasData) {
@@ -589,6 +590,7 @@ class SaveInterface {
      */
     afterSaveAbc() {
         // Lazy-load abc module before using saveAbcOutput
+
         _lazyRequire(["activity/abc"], () => {
             try {
                 const abc = encodeURIComponent(saveAbcOutput(this.activity));
@@ -724,6 +726,7 @@ class SaveInterface {
         };
 
         // Lazy-load lilypond module before using LILYPONDHEADER
+
         _lazyRequire(["activity/lilypond"], () => {
             const lyheader = LILYPONDHEADER.replace(
                 /My Music Blocks Creation|Mr. Mouse/gi,
@@ -768,7 +771,14 @@ class SaveInterface {
 
                 // Trigger save after a short delay to let UI update
                 setTimeout(() => {
-                    this.afterSaveLilypond();
+                    try {
+                        this.afterSaveLilypond();
+                    } catch (e) {
+                        console.error("Error generating Lilypond output:", e);
+                        this.activity.errorMsg(_("Error generating Lilypond output. ") + e.message);
+                    } finally {
+                        document.body.style.cursor = "default";
+                    }
                 }, 100);
             } else {
                 // No buffered data - run the program to generate notation (original behavior)
@@ -808,6 +818,7 @@ class SaveInterface {
      */
     afterSaveLilypond(filename) {
         // Lazy-load lilypond module before using saveLilypondOutput
+
         _lazyRequire(["activity/lilypond"], () => {
             filename = docById("fileName").value;
             try {
@@ -957,6 +968,7 @@ class SaveInterface {
      */
     afterSaveMxml(filename) {
         // Lazy-load mxml module before using saveMxmlOutput
+
         _lazyRequire(["activity/mxml"], () => {
             const data = saveMxmlOutput(this.activity.logo);
             this.download("xml", "data:text;utf8," + encodeURIComponent(data), filename);
