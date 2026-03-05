@@ -677,6 +677,7 @@ class Palettes {
 
     getPluginMacroExpansion(blkname, x, y) {
         const obj = this.pluginMacros[blkname];
+        // eslint-disable-next-line eqeqeq
         if (obj != null) {
             obj[0][2] = x;
             obj[0][3] = y;
@@ -863,6 +864,7 @@ class Palettes {
     }
 
     updatePalettes(showPalette) {
+        // eslint-disable-next-line eqeqeq
         if (showPalette != null) {
             // Show the action palette after adding/deleting new
             // nameddo blocks.
@@ -1002,7 +1004,7 @@ class Palettes {
         row.onmouseout = () => clearTimeout(timeout);
 
         row.onclick = () => {
-            if (name == "search") {
+            if (name === "search") {
                 this._hideMenus();
                 this.activity.showSearchWidget();
             } else {
@@ -1224,7 +1226,7 @@ class PaletteModel {
                 label = _("pitch converter");
                 break;
             default:
-                if (blkname != modname) {
+                if (blkname !== modname) {
                     // Override label for do, storein, box, and namedarg
                     if (blkname === "storein" && block.defaults[0] === _("box")) {
                         label = _("store in");
@@ -1261,7 +1263,8 @@ class PaletteModel {
                 "calcArg",
                 "nameddoArg",
                 "namedcalcArg"
-            ].indexOf(protoBlock.name) != -1 &&
+            ].indexOf(protoBlock.name) !== -1 &&
+            // eslint-disable-next-line eqeqeq
             label != null
         ) {
             if (getTextWidth(label, "bold 20pt Sans") > TEXTWIDTH) {
@@ -1504,7 +1507,7 @@ class Palette {
         const blocks = this.model.blocks;
         blocks.reverse();
         const protoListScope = [...this.protoList];
-        if (last(blocks).blkname != last(protoListScope).name) protoListScope.reverse();
+        if (last(blocks).blkname !== last(protoListScope).name) protoListScope.reverse();
         const fragment = document.createDocumentFragment();
         for (const blk in blocks) {
             const b = blocks[blk];
