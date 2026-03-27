@@ -1390,9 +1390,8 @@ class Palette {
     }
 
     hideMenu() {
-        docById(
-            "palette"
-        ).childNodes[0].style.borderRight = `1px solid ${platformColor.selectorSelected}`;
+        docById("palette").childNodes[0].style.borderRight =
+            `1px solid ${platformColor.selectorSelected}`;
         if (this._outsideClickListener) {
             document.removeEventListener("click", this._outsideClickListener);
             this._outsideClickListener = null;
@@ -1544,10 +1543,14 @@ class Palette {
                 // to make it positioned relative to the body
                 document.body.appendChild(img);
 
+                // Cache dimensions once to avoid forced layout on every mousemove
+                const halfW = img.offsetWidth / 2;
+                const halfH = img.offsetHeight / 2;
+
                 // centers the img at (pageX, pageY) coordinates
                 const moveAt = (pageX, pageY) => {
-                    img.style.left = pageX - img.offsetWidth / 2 + "px";
-                    img.style.top = pageY - img.offsetHeight / 2 + "px";
+                    img.style.left = pageX - halfW + "px";
+                    img.style.top = pageY - halfH + "px";
                 };
 
                 const onMouseMove = e => {
