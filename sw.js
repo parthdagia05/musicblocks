@@ -31,7 +31,6 @@ self.addEventListener("activate", function (event) {
     console.log("[PWA Builder] Claiming clients for current page");
     event.waitUntil(self.clients.claim());
 });
-/*
 function isPrecachedRequest(request) {
     try {
         const url = new URL(request.url);
@@ -100,22 +99,13 @@ function shouldCacheResponse(request, response) {
     // Only cache responses for allowlisted requests (static assets + explicit precache URLs).
     return isStaticAssetRequest(request) || isPrecachedRequest(request);
 }
-*/
-// Filter out unsupported URL schemes before caching
 function updateCache(request, response) {
     // Cache API only supports http:// and https:// requests.
-    // Attempting to cache other schemes (e.g. chrome-extension://, moz-extension://)
-    // throws a TypeError. We silently skip them to avoid flooding the console
-    // with repeated errors that obscure real issues.
     if (!request.url.startsWith("http")) {
         return Promise.resolve();
     }
 
-    // Partial responses (HTTP 206) cannot be cached reliably
-    // because they represent incomplete content (e.g. range requests).
-    // Caching them could serve corrupt or incomplete data later.
-    if (response.status === 206) {
-        console.log("Partial response is unsupported for caching.");
+    if (!shouldCacheResponse(request, response)) {
         return Promise.resolve();
     }
 
