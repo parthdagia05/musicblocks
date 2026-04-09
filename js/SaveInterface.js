@@ -273,10 +273,10 @@ class SaveInterface {
         }
 
         file = file
-            .replace(new RegExp("{{ project_description }}", "g"), description)
-            .replace(new RegExp("{{ project_name }}", "g"), name)
-            .replace(new RegExp("{{ data }}", "g"), data)
-            .replace(new RegExp("{{ project_image }}", "g"), image);
+            .replace(new RegExp("{{ project_description }}", "g"), escapeHTML(description))
+            .replace(new RegExp("{{ project_name }}", "g"), escapeHTML(name))
+            .replace(new RegExp("{{ data }}", "g"), escapeHTML(data))
+            .replace(new RegExp("{{ project_image }}", "g"), escapeHTML(image));
         return file;
     }
 
@@ -386,7 +386,10 @@ class SaveInterface {
 
                         const drumTrack = trackMap.get(drum);
 
-                        const midiNumber = drumMIDI[drum] || 36; // default to Bass Drum
+                        const midiNumber =
+                            Object.prototype.hasOwnProperty.call(drumMIDI, drum) && drumMIDI[drum]
+                                ? drumMIDI[drum]
+                                : 36; // default to Bass Drum
                         drumTrack.addNote({
                             midi: midiNumber,
                             time: globalTime,
@@ -400,7 +403,9 @@ class SaveInterface {
                                 parseInt(blockIndex) + 1
                             } - ${instrument}`;
                             instrumentTrack.instrument.number =
-                                instrumentMIDI[instrument] ?? instrumentMIDI["default"];
+                                Object.prototype.hasOwnProperty.call(instrumentMIDI, instrument)
+                                    ? instrumentMIDI[instrument]
+                                    : instrumentMIDI["default"];
                             trackMap.set(instrument, instrumentTrack);
                         }
 
@@ -541,11 +546,23 @@ class SaveInterface {
                 activity.logo.notationOutput = activity.logo.recordingBuffer.notationOutput;
                 activity.logo.notationNotes = activity.logo.recordingBuffer.notationNotes;
                 for (let t = 0; t < activity.turtles.getTurtleCount(); t++) {
-                    if (activity.logo.recordingBuffer.notationStaging[t]) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(
+                            activity.logo.recordingBuffer.notationStaging,
+                            t
+                        ) &&
+                        activity.logo.recordingBuffer.notationStaging[t]
+                    ) {
                         activity.logo.notation.notationStaging[t] =
                             activity.logo.recordingBuffer.notationStaging[t];
                     }
-                    if (activity.logo.recordingBuffer.notationDrumStaging[t]) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(
+                            activity.logo.recordingBuffer.notationDrumStaging,
+                            t
+                        ) &&
+                        activity.logo.recordingBuffer.notationDrumStaging[t]
+                    ) {
                         activity.logo.notation.notationDrumStaging[t] =
                             activity.logo.recordingBuffer.notationDrumStaging[t];
                     }
@@ -623,11 +640,23 @@ class SaveInterface {
             activity.logo.notationOutput = activity.logo.recordingBuffer.notationOutput;
             activity.logo.notationNotes = activity.logo.recordingBuffer.notationNotes;
             for (let t = 0; t < activity.turtles.getTurtleCount(); t++) {
-                if (activity.logo.recordingBuffer.notationStaging[t]) {
+                if (
+                    Object.prototype.hasOwnProperty.call(
+                        activity.logo.recordingBuffer.notationStaging,
+                        t
+                    ) &&
+                    activity.logo.recordingBuffer.notationStaging[t]
+                ) {
                     activity.logo.notation.notationStaging[t] =
                         activity.logo.recordingBuffer.notationStaging[t];
                 }
-                if (activity.logo.recordingBuffer.notationDrumStaging[t]) {
+                if (
+                    Object.prototype.hasOwnProperty.call(
+                        activity.logo.recordingBuffer.notationDrumStaging,
+                        t
+                    ) &&
+                    activity.logo.recordingBuffer.notationDrumStaging[t]
+                ) {
                     activity.logo.notation.notationDrumStaging[t] =
                         activity.logo.recordingBuffer.notationDrumStaging[t];
                 }
