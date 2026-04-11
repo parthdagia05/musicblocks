@@ -8012,7 +8012,13 @@ class Activity {
             // Use managed addEventListener for automatic cleanup
             this.addEventListener(document, "mousemove", this.handleMouseMove);
             this.addEventListener(document, "click", this.handleDocumentClick);
-            this.addEventListener(window, "beforeunload", this._stopRenderLoop);
+            this.addEventListener(window, "beforeunload", () => {
+                this._stopRenderLoop();
+                if (this._autoSaveInterval !== null) {
+                    clearInterval(this._autoSaveInterval);
+                    this._autoSaveInterval = null;
+                }
+            });
 
             this._createMsgContainer(
                 "#ffffff",
@@ -8134,6 +8140,27 @@ class Activity {
             }
 
             window.saveLocally = this.saveLocally;
+
+            // Auto-save live workspace every 5 minutes to guard against
+            // data loss from browser crashes (see issue #2994).
+            // Deferred while the project is actively running to avoid
+            // interrupting playback.
+            this._autoSaveInterval = setInterval(
+                () => {
+                    try {
+                        if (this.logo && this.logo._alreadyRunning) {
+                            return;
+                        }
+
+                        if (this.saveLocally !== null && this.saveLocally !== undefined) {
+                            this.saveLocally();
+                        }
+                    } catch (e) {
+                        console.error("[AutoSave] Failed:", e);
+                    }
+                },
+                5 * 60 * 1000
+            );
 
             initBasicProtoBlocks(this);
 
