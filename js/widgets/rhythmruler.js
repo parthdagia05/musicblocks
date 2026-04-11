@@ -115,6 +115,28 @@ class RhythmRuler {
         this._dissectHistory = [];
 
         /**
+         * Whether the circular (pie) view is active.
+         * @type {boolean}
+         * @private
+         */
+        this._circularView = false;
+
+        /**
+         * Canvas element for the circular view.
+         * @type {HTMLCanvasElement|null}
+         * @private
+         */
+        this._circularCanvas = null;
+
+        /**
+         * Index of the cell currently highlighted during circular playback.
+         * Keyed by ruler index.
+         * @type {Object}
+         * @private
+         */
+        this._circularHighlight = {};
+
+        /**
          * Array representing the list of undo operations.
          * @type {Array}
          * @private
@@ -577,12 +599,19 @@ class RhythmRuler {
             this._clear();
         };
 
+        this._circularToggle = widgetWindow.addButton("circle.svg", iconSize, _("Circular view"));
+        this._circularToggle.onclick = () => {
+            this._circularView = !this._circularView;
+            this._toggleCircularView();
+        };
+
         /**
          * Represents the table containing the rhythm rulers.
          * The table has an outer div for vertical scrolling and an inner div for horizontal scrolling.
          * @type {HTMLTableElement}
          */
         const rhythmRulerTable = document.createElement("table");
+        this._rhythmRulerTable = rhythmRulerTable;
         widgetWindow.getWidgetBody().append(rhythmRulerTable);
 
         /**
@@ -1340,6 +1369,7 @@ class RhythmRuler {
             noteValues[cell.cellIndex] = -noteValue;
 
             this._calculateZebraStripes(this._rulerSelected);
+            this._refreshCircularView();
 
             const divisionHistory = this.Rulers[this._rulerSelected][1];
             if (addToUndoList) {
@@ -1402,6 +1432,7 @@ class RhythmRuler {
             }
 
             this._calculateZebraStripes(this._rulerSelected);
+            this._refreshCircularView();
         }
     }
 
@@ -1471,6 +1502,7 @@ class RhythmRuler {
             }
 
             this._calculateZebraStripes(this._rulerSelected);
+            this._refreshCircularView();
         }
     }
 
@@ -1581,6 +1613,7 @@ class RhythmRuler {
             );
 
             this._calculateZebraStripes(this._rulerSelected);
+            this._refreshCircularView();
         }
     }
 
@@ -1717,6 +1750,7 @@ class RhythmRuler {
 
         divisionHistory.pop();
         this._calculateZebraStripes(lastRuler);
+        this._refreshCircularView();
     }
 
     /**
@@ -1764,6 +1798,8 @@ class RhythmRuler {
                 this._undo();
             }
         }
+
+        this._refreshCircularView();
     }
 
     /**
@@ -1788,6 +1824,10 @@ class RhythmRuler {
         for (let i = 0; i < this.Rulers.length; i++) {
             this._calculateZebraStripes(i);
         }
+
+        // Clear circular highlights and redraw.
+        this._circularHighlight = {};
+        this._refreshCircularView();
     }
 
     /**
@@ -1968,6 +2008,12 @@ class RhythmRuler {
 
             // And highlight its cell.
             cell.style.backgroundColor = platformColor.rulerHighlight; // selectorBackground;
+
+            // Update circular view highlight if active.
+            if (this._circularView && this._circularCanvas) {
+                this._circularHighlight[rulerNo] = colIndex;
+                this._drawCircularView();
+            }
 
             // Calculate any offset in playback.
             const d = new Date();
@@ -2770,6 +2816,239 @@ class RhythmRuler {
             docById("wheelDiv").style.top = y + 60 + "px";
         } else {
             docById("wheelDiv").style.top = y - 300 + "px";
+        }
+    }
+
+    /**
+     * Toggles between linear (table) and circular (canvas) views.
+     * @private
+     */
+    _refreshCircularView() {
+        if (this._circularView && this._circularCanvas) {
+            this._drawCircularView();
+        }
+    }
+
+    /**
+     * Toggles between linear (table) and circular (canvas) views.
+     * @private
+     */
+    _toggleCircularView() {
+        if (this._circularView) {
+            this._rhythmRulerTable.style.display = "none";
+            if (!this._circularCanvas) {
+                this._circularCanvas = document.createElement("canvas");
+                this._circularCanvas.style.display = "block";
+                this._circularCanvas.style.margin = "auto";
+                this._circularCanvas.addEventListener("click", event => {
+                    this._onCircularClick(event);
+                });
+                this.widgetWindow.getWidgetBody().append(this._circularCanvas);
+            }
+            this._circularCanvas.style.display = "block";
+            this._drawCircularView();
+        } else {
+            if (this._circularCanvas) {
+                this._circularCanvas.style.display = "none";
+            }
+            this._rhythmRulerTable.style.display = "";
+            // Refresh zebra stripes after switching back.
+            for (let i = 0; i < this.Rulers.length; i++) {
+                this._calculateZebraStripes(i);
+            }
+        }
+    }
+
+    /**
+     * Draws the circular (donut/pie) view on the canvas.
+     * Each ruler is a concentric ring. Each note value is an arc slice
+     * whose angle is proportional to its duration.
+     * @private
+     */
+    _drawCircularView() {
+        const canvas = this._circularCanvas;
+        if (!canvas) return;
+
+        const body = this.widgetWindow.getWidgetBody();
+        const bodyW = body.clientWidth || 400;
+        const bodyH = body.clientHeight || 400;
+        // Use the smaller dimension but leave room for padding.
+        const size = Math.max(Math.min(bodyW - 20, bodyH - 20, 600), 200);
+        canvas.width = size;
+        canvas.height = size;
+
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, size, size);
+
+        const centerX = size / 2;
+        const centerY = size / 2;
+        const rulerCount = this.Rulers.length;
+
+        // Ring geometry: leave a hole in the center and space for labels.
+        const innerHoleRadius = size * 0.1;
+        const outerLimit = size * 0.47;
+        const ringGap = 2;
+        const totalRingSpace = outerLimit - innerHoleRadius;
+        const ringThickness =
+            rulerCount > 0
+                ? (totalRingSpace - ringGap * (rulerCount - 1)) / rulerCount
+                : totalRingSpace;
+
+        const colors = [platformColor.selectorBackground, platformColor.selectorSelected];
+
+        for (let i = 0; i < rulerCount; i++) {
+            const noteValues = this.Rulers[i][0];
+            // Outermost ruler is index 0 (matching Walter's concentric sketch).
+            const ringIndex = i;
+            const ringInner = innerHoleRadius + ringIndex * (ringThickness + ringGap);
+            const ringOuter = ringInner + ringThickness;
+
+            // Sum of durations (1/noteValue) for angle calculation.
+            let totalDuration = 0;
+            for (let j = 0; j < noteValues.length; j++) {
+                totalDuration += 1 / Math.abs(noteValues[j]);
+            }
+
+            let startAngle = -Math.PI / 2; // 12 o'clock
+
+            for (let j = 0; j < noteValues.length; j++) {
+                const nv = noteValues[j];
+                const duration = 1 / Math.abs(nv);
+                const sweepAngle = (duration / totalDuration) * 2 * Math.PI;
+                const endAngle = startAngle + sweepAngle;
+
+                // Determine fill color.
+                const isHighlighted = this._circularHighlight[i] === j && this._playing;
+                let fillColor;
+                if (isHighlighted) {
+                    fillColor = platformColor.rulerHighlight;
+                } else if (nv < 0) {
+                    // Rest: muted color
+                    fillColor = "#888888";
+                } else {
+                    fillColor = i % 2 === 0 ? colors[j % 2] : colors[(j + 1) % 2];
+                }
+
+                // Draw the arc slice.
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, ringOuter, startAngle, endAngle);
+                ctx.arc(centerX, centerY, ringInner, endAngle, startAngle, true);
+                ctx.closePath();
+                ctx.fillStyle = fillColor;
+                ctx.fill();
+                ctx.strokeStyle = "#666666";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Draw note label if slice is large enough.
+                const midAngle = startAngle + sweepAngle / 2;
+                const labelRadius = (ringInner + ringOuter) / 2;
+                const labelX = centerX + labelRadius * Math.cos(midAngle);
+                const labelY = centerY + labelRadius * Math.sin(midAngle);
+
+                if (sweepAngle > 0.25 && ringThickness > 20) {
+                    const obj = rationalToFraction(Math.abs(1 / nv));
+                    const text = obj[0] + "/" + obj[1];
+                    ctx.fillStyle = isHighlighted ? "#000000" : "#FFFFFF";
+                    ctx.font = Math.min(Math.floor(ringThickness * 0.35), 14) + "px sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(text, labelX, labelY);
+                }
+
+                startAngle = endAngle;
+            }
+        }
+
+        // Draw center hole (clear it).
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, innerHoleRadius - 1, 0, 2 * Math.PI);
+        ctx.fillStyle = getComputedStyle(canvas.parentNode).backgroundColor || "#303030";
+        ctx.fill();
+    }
+
+    /**
+     * Handles click events on the circular canvas to determine which
+     * ruler and cell was clicked, then triggers a dissect operation.
+     * @private
+     * @param {MouseEvent} event
+     */
+    _onCircularClick(event) {
+        if (this._playing) return;
+
+        const canvas = this._circularCanvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        let angle = Math.atan2(dy, dx);
+        // Normalize so 12 o'clock (top) is 0 and goes clockwise.
+        angle = angle + Math.PI / 2;
+        if (angle < 0) angle += 2 * Math.PI;
+
+        const size = canvas.width;
+        const innerHoleRadius = size * 0.1;
+        const outerLimit = size * 0.47;
+        const rulerCount = this.Rulers.length;
+        const ringGap = 2;
+        const totalRingSpace = outerLimit - innerHoleRadius;
+        const ringThickness =
+            rulerCount > 0
+                ? (totalRingSpace - ringGap * (rulerCount - 1)) / rulerCount
+                : totalRingSpace;
+
+        // Find which ring (ruler) was clicked.
+        let clickedRuler = -1;
+        for (let i = 0; i < rulerCount; i++) {
+            const ringInner = innerHoleRadius + i * (ringThickness + ringGap);
+            const ringOuter = ringInner + ringThickness;
+            if (dist >= ringInner && dist <= ringOuter) {
+                clickedRuler = i;
+                break;
+            }
+        }
+
+        if (clickedRuler < 0) return;
+
+        // Find which cell (slice) was clicked based on angle.
+        const noteValues = this.Rulers[clickedRuler][0];
+        let totalDuration = 0;
+        for (let j = 0; j < noteValues.length; j++) {
+            totalDuration += 1 / Math.abs(noteValues[j]);
+        }
+
+        let cumAngle = 0;
+        let clickedCell = -1;
+        for (let j = 0; j < noteValues.length; j++) {
+            const duration = 1 / Math.abs(noteValues[j]);
+            const sweepAngle = (duration / totalDuration) * 2 * Math.PI;
+            if (angle >= cumAngle && angle < cumAngle + sweepAngle) {
+                clickedCell = j;
+                break;
+            }
+            cumAngle += sweepAngle;
+        }
+
+        if (clickedCell < 0) return;
+
+        // Perform the dissect on the identified cell.
+        this._rulerSelected = clickedRuler;
+        const ruler = this._rulers[clickedRuler];
+        if (ruler && ruler.cells[clickedCell]) {
+            let inputNum = this._dissectNumber.value;
+            if (inputNum === "" || isNaN(inputNum)) {
+                inputNum = 2;
+            } else {
+                inputNum = Math.abs(Math.floor(inputNum));
+            }
+            this.__dissectByNumber(ruler.cells[clickedCell], inputNum, true);
+            this.saveDissectHistory();
+            this._drawCircularView();
         }
     }
 }
