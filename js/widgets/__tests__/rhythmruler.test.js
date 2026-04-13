@@ -621,14 +621,101 @@ describe("RhythmRuler Widget", () => {
             expect(() => rhythmRuler._drawCircularView()).not.toThrow();
         });
 
-        test("_onCircularClick should not act while playing", () => {
+        test("_onCircularMouseDown should not record a hit while playing", () => {
             rhythmRuler._playing = true;
             rhythmRuler._circularCanvas = createMockCanvas();
             rhythmRuler.Rulers = [[[4, 4, 4, 4], []]];
 
-            const spy = jest.spyOn(rhythmRuler, "__dissectByNumber").mockImplementation();
-            rhythmRuler._onCircularClick({ clientX: 100, clientY: 100 });
-            expect(spy).not.toHaveBeenCalled();
+            rhythmRuler._onCircularMouseDown({ clientX: 100, clientY: 100 });
+            expect(rhythmRuler._circularDownHit).toBeNull();
+        });
+
+        test("_onCircularMouseUp should not act while playing", () => {
+            rhythmRuler._playing = true;
+            rhythmRuler._circularCanvas = createMockCanvas();
+            rhythmRuler.Rulers = [[[4, 4, 4, 4], []]];
+
+            const dissectSpy = jest.spyOn(rhythmRuler, "__dissectByNumber").mockImplementation();
+            const tieSpy = jest.spyOn(rhythmRuler, "__tie").mockImplementation();
+            rhythmRuler._onCircularMouseUp({ clientX: 100, clientY: 100 });
+            expect(dissectSpy).not.toHaveBeenCalled();
+            expect(tieSpy).not.toHaveBeenCalled();
+        });
+
+        test("same-slice mousedown+mouseup should trigger dissect", () => {
+            rhythmRuler._playing = false;
+            rhythmRuler._circularCanvas = createMockCanvas();
+            rhythmRuler.Rulers = [[[4, 4, 4, 4], []]];
+            rhythmRuler._rulers = [
+                { cells: [{ style: {} }, { style: {} }, { style: {} }, { style: {} }] }
+            ];
+            rhythmRuler._dissectNumber = { value: "2" };
+
+            // Pretend both events landed on the same slice.
+            jest.spyOn(rhythmRuler, "_hitTestCircular").mockReturnValue({
+                rulerIndex: 0,
+                cellIndex: 1
+            });
+            const dissectSpy = jest.spyOn(rhythmRuler, "__dissectByNumber").mockImplementation();
+            jest.spyOn(rhythmRuler, "saveDissectHistory").mockImplementation();
+            jest.spyOn(rhythmRuler, "_drawCircularView").mockImplementation();
+
+            rhythmRuler._onCircularMouseDown({});
+            rhythmRuler._onCircularMouseUp({});
+
+            expect(dissectSpy).toHaveBeenCalledTimes(1);
+        });
+
+        test("cross-slice swipe on same ruler should trigger __tie", () => {
+            rhythmRuler._playing = false;
+            rhythmRuler._circularCanvas = createMockCanvas();
+            rhythmRuler.Rulers = [[[4, 4, 4, 4], []]];
+            rhythmRuler._rulers = [
+                { cells: [{ style: {} }, { style: {} }, { style: {} }, { style: {} }] }
+            ];
+
+            const hitSpy = jest.spyOn(rhythmRuler, "_hitTestCircular");
+            hitSpy.mockReturnValueOnce({ rulerIndex: 0, cellIndex: 0 });
+            hitSpy.mockReturnValueOnce({ rulerIndex: 0, cellIndex: 2 });
+
+            const tieSpy = jest.spyOn(rhythmRuler, "__tie").mockImplementation();
+            jest.spyOn(rhythmRuler, "saveDissectHistory").mockImplementation();
+            jest.spyOn(rhythmRuler, "_drawCircularView").mockImplementation();
+
+            rhythmRuler._onCircularMouseDown({});
+            rhythmRuler._onCircularMouseUp({});
+
+            expect(tieSpy).toHaveBeenCalledTimes(1);
+            expect(rhythmRuler._rulerSelected).toBe(0);
+        });
+
+        test("cross-ruler swipe should NOT tie (falls through to dissect)", () => {
+            rhythmRuler._playing = false;
+            rhythmRuler._circularCanvas = createMockCanvas();
+            rhythmRuler.Rulers = [
+                [[4, 4, 4, 4], []],
+                [[4, 4, 4, 4], []]
+            ];
+            rhythmRuler._rulers = [
+                { cells: [{ style: {} }, { style: {} }, { style: {} }, { style: {} }] },
+                { cells: [{ style: {} }, { style: {} }, { style: {} }, { style: {} }] }
+            ];
+            rhythmRuler._dissectNumber = { value: "2" };
+
+            const hitSpy = jest.spyOn(rhythmRuler, "_hitTestCircular");
+            hitSpy.mockReturnValueOnce({ rulerIndex: 0, cellIndex: 1 });
+            hitSpy.mockReturnValueOnce({ rulerIndex: 1, cellIndex: 2 });
+
+            const tieSpy = jest.spyOn(rhythmRuler, "__tie").mockImplementation();
+            const dissectSpy = jest.spyOn(rhythmRuler, "__dissectByNumber").mockImplementation();
+            jest.spyOn(rhythmRuler, "saveDissectHistory").mockImplementation();
+            jest.spyOn(rhythmRuler, "_drawCircularView").mockImplementation();
+
+            rhythmRuler._onCircularMouseDown({});
+            rhythmRuler._onCircularMouseUp({});
+
+            expect(tieSpy).not.toHaveBeenCalled();
+            expect(dissectSpy).toHaveBeenCalledTimes(1);
         });
 
         test("__pause should clear circular highlights", () => {

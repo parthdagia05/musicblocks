@@ -137,6 +137,22 @@ class RhythmRuler {
         this._circularHighlight = {};
 
         /**
+         * Tracks the slice where a mousedown began, used to distinguish
+         * single-slice dissect from multi-slice swipe-to-tie.
+         * @type {{rulerIndex: number, cellIndex: number}|null}
+         * @private
+         */
+        this._circularDownHit = null;
+
+        /**
+         * Tracks the slice the pointer is currently over while dragging,
+         * so the soon-to-be-merged slices can be highlighted.
+         * @type {{rulerIndex: number, cellIndex: number}|null}
+         * @private
+         */
+        this._circularDragTo = null;
+
+        /**
          * Array representing the list of undo operations.
          * @type {Array}
          * @private
@@ -2840,8 +2856,20 @@ class RhythmRuler {
                 this._circularCanvas = document.createElement("canvas");
                 this._circularCanvas.style.display = "block";
                 this._circularCanvas.style.margin = "auto";
-                this._circularCanvas.addEventListener("click", event => {
-                    this._onCircularClick(event);
+                this._circularCanvas.addEventListener("mousedown", event => {
+                    this._onCircularMouseDown(event);
+                });
+                this._circularCanvas.addEventListener("mousemove", event => {
+                    this._onCircularMouseMove(event);
+                });
+                this._circularCanvas.addEventListener("mouseup", event => {
+                    this._onCircularMouseUp(event);
+                });
+                this._circularCanvas.addEventListener("mouseleave", () => {
+                    if (this._circularDragTo !== null) {
+                        this._circularDragTo = null;
+                        this._drawCircularView();
+                    }
                 });
                 this.widgetWindow.getWidgetBody().append(this._circularCanvas);
             }
@@ -2924,9 +2952,20 @@ class RhythmRuler {
 
                 // Determine fill color.
                 const isHighlighted = this._circularHighlight[i] === j && this._playing;
+                const isInDragRange =
+                    this._circularDownHit !== null &&
+                    this._circularDragTo !== null &&
+                    this._circularDownHit.rulerIndex === i &&
+                    this._circularDragTo.rulerIndex === i &&
+                    j >=
+                        Math.min(this._circularDownHit.cellIndex, this._circularDragTo.cellIndex) &&
+                    j <= Math.max(this._circularDownHit.cellIndex, this._circularDragTo.cellIndex);
                 let fillColor;
                 if (isHighlighted) {
                     fillColor = platformColor.rulerHighlight;
+                } else if (isInDragRange) {
+                    // Slices currently being dragged across: show as pending merge.
+                    fillColor = platformColor.rulerHighlight || "#FFEB3B";
                 } else if (nv < 0) {
                     // Rest: muted color
                     fillColor = "#888888";
@@ -2954,7 +2993,7 @@ class RhythmRuler {
                 if (sweepAngle > 0.25 && ringThickness > 20) {
                     const obj = rationalToFraction(Math.abs(1 / nv));
                     const text = obj[0] + "/" + obj[1];
-                    ctx.fillStyle = isHighlighted ? "#000000" : "#FFFFFF";
+                    ctx.fillStyle = isHighlighted || isInDragRange ? "#000000" : "#FFFFFF";
                     ctx.font = Math.min(Math.floor(ringThickness * 0.35), 14) + "px sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
@@ -2989,15 +3028,16 @@ class RhythmRuler {
     }
 
     /**
-     * Handles click events on the circular canvas to determine which
-     * ruler and cell was clicked, then triggers a dissect operation.
+     * Hit-tests a mouse event on the circular canvas and returns the
+     * ruler and cell index under the pointer, or null if outside any ring.
      * @private
      * @param {MouseEvent} event
+     * @returns {{rulerIndex: number, cellIndex: number}|null}
      */
-    _onCircularClick(event) {
-        if (this._playing) return;
-
+    _hitTestCircular(event) {
         const canvas = this._circularCanvas;
+        if (!canvas) return null;
+
         const rect = canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
@@ -3008,7 +3048,7 @@ class RhythmRuler {
         const dy = y - centerY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         let angle = Math.atan2(dy, dx);
-        // Normalize so 12 o'clock (top) is 0 and goes clockwise.
+        // Normalize so 12 o'clock (top) is 0 and increases clockwise.
         angle = angle + Math.PI / 2;
         if (angle < 0) angle += 2 * Math.PI;
 
@@ -3023,54 +3063,157 @@ class RhythmRuler {
                 ? (totalRingSpace - ringGap * (rulerCount - 1)) / rulerCount
                 : totalRingSpace;
 
-        // Find which ring (ruler) was clicked.
-        let clickedRuler = -1;
+        // Find which ring (ruler) the pointer is in.
+        let hitRuler = -1;
         for (let i = 0; i < rulerCount; i++) {
             const ringInner = innerHoleRadius + i * (ringThickness + ringGap);
             const ringOuter = ringInner + ringThickness;
             if (dist >= ringInner && dist <= ringOuter) {
-                clickedRuler = i;
+                hitRuler = i;
                 break;
             }
         }
+        if (hitRuler < 0) return null;
 
-        if (clickedRuler < 0) return;
-
-        // Find which cell (slice) was clicked based on angle.
-        const noteValues = this.Rulers[clickedRuler][0];
+        // Find which slice based on angle.
+        const noteValues = this.Rulers[hitRuler][0];
         let totalDuration = 0;
         for (let j = 0; j < noteValues.length; j++) {
             totalDuration += 1 / Math.abs(noteValues[j]);
         }
 
         let cumAngle = 0;
-        let clickedCell = -1;
+        let hitCell = -1;
         for (let j = 0; j < noteValues.length; j++) {
             const duration = 1 / Math.abs(noteValues[j]);
             const sweepAngle = (duration / totalDuration) * 2 * Math.PI;
             if (angle >= cumAngle && angle < cumAngle + sweepAngle) {
-                clickedCell = j;
+                hitCell = j;
                 break;
             }
             cumAngle += sweepAngle;
         }
+        if (hitCell < 0) return null;
 
-        if (clickedCell < 0) return;
+        return { rulerIndex: hitRuler, cellIndex: hitCell };
+    }
 
-        // Perform the dissect on the identified cell.
-        this._rulerSelected = clickedRuler;
-        const ruler = this._rulers[clickedRuler];
-        if (ruler && ruler.cells[clickedCell]) {
+    /**
+     * Records the slice where a mousedown began so it can later be paired
+     * with a mouseup to decide between a single-slice dissect and a
+     * multi-slice tie.
+     * @private
+     * @param {MouseEvent} event
+     */
+    _onCircularMouseDown(event) {
+        if (this._playing) return;
+        const hit = this._hitTestCircular(event);
+        if (!hit) {
+            this._circularDownHit = null;
+            this._circularDragTo = null;
+            return;
+        }
+        this._circularDownHit = hit;
+        this._circularDragTo = hit;
+    }
+
+    /**
+     * Tracks the slice under the pointer while the mouse button is held
+     * down so the soon-to-be-merged range can be highlighted.
+     * @private
+     * @param {MouseEvent} event
+     */
+    _onCircularMouseMove(event) {
+        if (this._playing) return;
+        if (this._circularDownHit === null) return;
+
+        const hit = this._hitTestCircular(event);
+        const prev = this._circularDragTo;
+
+        // Only redraw when the slice under the pointer actually changes,
+        // to avoid flooding redraws on every pixel of movement.
+        const changed =
+            (prev === null && hit !== null) ||
+            (prev !== null && hit === null) ||
+            (prev !== null &&
+                hit !== null &&
+                (prev.rulerIndex !== hit.rulerIndex || prev.cellIndex !== hit.cellIndex));
+
+        if (changed) {
+            this._circularDragTo = hit;
+            this._drawCircularView();
+        }
+    }
+
+    /**
+     * Handles the end of a pointer gesture on the circular canvas.
+     * If the pointer came up on the same slice it went down on, the slice
+     * is dissected (split). If it came up on a different slice within the
+     * same ruler, the slices between them are tied together.
+     * @private
+     * @param {MouseEvent} event
+     */
+    _onCircularMouseUp(event) {
+        if (this._playing) return;
+        const down = this._circularDownHit;
+        this._circularDownHit = null;
+        this._circularDragTo = null;
+        if (!down) return;
+
+        const up = this._hitTestCircular(event);
+        if (!up) return;
+
+        // A tie requires both endpoints to be on the same ruler and on
+        // different slices; anything else falls through to dissect.
+        if (down.rulerIndex === up.rulerIndex && down.cellIndex !== up.cellIndex) {
+            this._tieCircular(down.rulerIndex, down.cellIndex, up.cellIndex);
+            return;
+        }
+
+        // Single-slice click: dissect.
+        this._rulerSelected = down.rulerIndex;
+        const ruler = this._rulers[down.rulerIndex];
+        if (ruler && ruler.cells[down.cellIndex]) {
             let inputNum = this._dissectNumber.value;
             if (inputNum === "" || isNaN(inputNum)) {
                 inputNum = 2;
             } else {
                 inputNum = Math.abs(Math.floor(inputNum));
             }
-            this.__dissectByNumber(ruler.cells[clickedCell], inputNum, true);
+            this.__dissectByNumber(ruler.cells[down.cellIndex], inputNum, true);
             this.saveDissectHistory();
             this._drawCircularView();
         }
+    }
+
+    /**
+     * Ties a contiguous range of slices on a single ruler into one note,
+     * reusing the linear view's __tie() implementation by pointing its
+     * _mouseDownCell/_mouseUpCell at the underlying DOM cells.
+     * @private
+     * @param {number} rulerIndex
+     * @param {number} fromCell
+     * @param {number} toCell
+     */
+    _tieCircular(rulerIndex, fromCell, toCell) {
+        const ruler = this._rulers[rulerIndex];
+        if (!ruler || !ruler.cells) return;
+
+        const downIndex = Math.min(fromCell, toCell);
+        const upIndex = Math.max(fromCell, toCell);
+        const downCell = ruler.cells[downIndex];
+        const upCell = ruler.cells[upIndex];
+        if (!downCell || !upCell) return;
+
+        this._rulerSelected = rulerIndex;
+        this._mouseDownCell = downCell;
+        this._mouseUpCell = upCell;
+        this.__tie(true);
+        this._mouseDownCell = null;
+        this._mouseUpCell = null;
+
+        this.saveDissectHistory();
+        this._drawCircularView();
     }
 }
 if (typeof module !== "undefined") {
