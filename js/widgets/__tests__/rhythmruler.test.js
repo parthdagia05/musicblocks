@@ -512,6 +512,8 @@ describe("RhythmRuler Widget", () => {
                     clearRect: jest.fn(),
                     beginPath: jest.fn(),
                     arc: jest.fn(),
+                    moveTo: jest.fn(),
+                    lineTo: jest.fn(),
                     closePath: jest.fn(),
                     fill: jest.fn(),
                     stroke: jest.fn(),

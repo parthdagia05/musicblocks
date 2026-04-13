@@ -2872,10 +2872,15 @@ class RhythmRuler {
         const body = this.widgetWindow.getWidgetBody();
         const bodyW = body.clientWidth || 400;
         const bodyH = body.clientHeight || 400;
-        // Use the smaller dimension but leave room for padding.
-        const size = Math.max(Math.min(bodyW - 20, bodyH - 20, 600), 200);
+        // Keep the canvas a perfect square so slices stay circular.
+        // Use the smaller dimension (minus padding) so the circle always fits.
+        const size = Math.max(Math.min(bodyW, bodyH) - 20, 200);
         canvas.width = size;
         canvas.height = size;
+        // Lock the CSS display size to match so the browser does not scale
+        // it into an oval when the container is wider than tall.
+        canvas.style.width = size + "px";
+        canvas.style.height = size + "px";
 
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, size, size);
@@ -2965,6 +2970,22 @@ class RhythmRuler {
         ctx.arc(centerX, centerY, innerHoleRadius - 1, 0, 2 * Math.PI);
         ctx.fillStyle = getComputedStyle(canvas.parentNode).backgroundColor || "#303030";
         ctx.fill();
+
+        // Draw a "start here, plays clockwise" indicator at 12 o'clock.
+        // A small triangle pointing clockwise (to the right) sits just above
+        // the outer edge of the rings.
+        const indicatorY = centerY - outerLimit - 6;
+        const arrowSize = Math.max(6, size * 0.02);
+        ctx.beginPath();
+        ctx.moveTo(centerX - arrowSize, indicatorY - arrowSize);
+        ctx.lineTo(centerX + arrowSize, indicatorY);
+        ctx.lineTo(centerX - arrowSize, indicatorY + arrowSize);
+        ctx.closePath();
+        ctx.fillStyle = platformColor.rulerHighlight || "#FFEB3B";
+        ctx.fill();
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 1;
+        ctx.stroke();
     }
 
     /**
