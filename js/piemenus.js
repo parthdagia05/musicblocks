@@ -3579,7 +3579,7 @@ const piemenuModes = (block, selectedMode) => {
             activeTabs.push(last(activeTabs) - mode[k]);
         }
 
-        docById("wheelnav-_exitWheel-title-1").style.fill = "#ffffff";
+        docById("wheelnav-_exitWheel-title-1").style.fill = platformColor.textColor || "#ffffff";
         docById("wheelnav-_exitWheel-title-1").style.pointerEvents = "none";
         docById("wheelnav-_exitWheel-slice-1").style.pointerEvents = "none";
         setTimeout(
@@ -3587,7 +3587,7 @@ const piemenuModes = (block, selectedMode) => {
                 const playButtonTitle = docById("wheelnav-_exitWheel-title-1");
                 const playButtonSlice = docById("wheelnav-_exitWheel-slice-1");
                 if (playButtonTitle && playButtonSlice) {
-                    playButtonTitle.style.fill = "#000000";
+                    playButtonTitle.style.fill = platformColor.textColor || "#000000";
                     playButtonTitle.style.pointerEvents = "auto";
                     playButtonSlice.style.pointerEvents = "auto";
                 }
