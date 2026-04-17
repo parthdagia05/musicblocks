@@ -547,8 +547,8 @@ function TemperamentWidget() {
         const i = Number(event.target.dataset.message);
         const that = this;
 
-        docById("noteInfo").style.width = "180px";
-        docById("noteInfo").style.height = "130px";
+        docById("noteInfo").style.width = "200px";
+        docById("noteInfo").style.height = "240px";
         if (docById("note")) docById("note").textContent = "";
         if (docById("frequency")) docById("frequency").textContent = "";
 
@@ -574,32 +574,81 @@ function TemperamentWidget() {
         freqSpan.textContent = this.frequencies[i];
         noteInfo.appendChild(freqSpan);
 
+        // Cents input (relative to the starting pitch value at this position).
+        // Musicians typically think in cents rather than hertz, so offer both.
+        const originalFrequency = parseFloat(this.frequencies[i]);
+        noteInfo.appendChild(document.createElement("br"));
+        noteInfo.appendChild(document.createTextNode(`\u00A0\u00A0${_("cents")}`));
+        const centsInput = document.createElement("input");
+        centsInput.type = "number";
+        centsInput.id = "centsInput1";
+        centsInput.value = "0";
+        centsInput.step = "1";
+        // Match the frequency display styling: blue text on grey rounded pill.
+        centsInput.className = "rangeslidervalue";
+        centsInput.style.width = "60px";
+        centsInput.style.textAlign = "center";
+        centsInput.style.border = "none";
+        noteInfo.appendChild(centsInput);
+
         noteInfo.appendChild(document.createElement("br"));
         noteInfo.appendChild(document.createElement("br"));
         const doneDiv = document.createElement("div");
         doneDiv.id = "done";
-        doneDiv.style.background = "rgb(196, 196, 196)";
+        doneDiv.style.background = "#64B5F6";
+        doneDiv.style.padding = "6px";
+        doneDiv.style.marginTop = "8px";
+        doneDiv.style.borderRadius = "4px";
+        doneDiv.style.cursor = "pointer";
         const doneCenter = document.createElement("center");
         doneCenter.textContent = _("done");
+        doneCenter.style.color = "white";
+        doneCenter.style.fontWeight = "bold";
         doneDiv.appendChild(doneCenter);
         noteInfo.appendChild(doneDiv);
 
-        docById("frequencySlider1").oninput = function () {
-            docById("frequencydiv1").textContent = docById("frequencySlider1").value;
-            const frequency = docById("frequencySlider1").value;
-            const ratio = frequency / that.frequencies[0];
+        // Convert between frequency and cents using the widget-level helpers
+        // (see _freqToCents / _centsToFreq) so the math is testable.
+        const freqToCents = freq => that._freqToCents(freq, originalFrequency);
+        const centsToFreq = cents => that._centsToFreq(cents, originalFrequency);
+
+        // Shared update logic so both inputs behave identically.
+        const applyFrequency = frequency => {
+            const freqNum = parseFloat(frequency);
+            docById("frequencydiv1").textContent = freqNum.toFixed(2);
+            const ratio = freqNum / that.frequencies[0];
             that.temporaryRatios = that.ratios.slice();
             that.temporaryRatios[i] = ratio;
             that._logo.resetSynth(0);
             that._logo.synth.trigger(
                 0,
-                frequency,
+                freqNum,
                 Singer.defaultBPMFactor * 0.01,
                 "electronic synth",
                 null,
                 null
             );
             that.createMainWheel(that.temporaryRatios);
+        };
+
+        docById("frequencySlider1").oninput = function () {
+            const frequency = parseFloat(docById("frequencySlider1").value);
+            // Keep cents box in sync without triggering its own handler.
+            docById("centsInput1").value = Math.round(freqToCents(frequency));
+            applyFrequency(frequency);
+        };
+
+        docById("centsInput1").oninput = function () {
+            const cents = parseFloat(docById("centsInput1").value);
+            if (isNaN(cents)) return;
+            const sliderEl = docById("frequencySlider1");
+            const min = parseFloat(sliderEl.getAttribute("min"));
+            const max = parseFloat(sliderEl.getAttribute("max"));
+            // Clamp the resulting frequency to the slider's allowed range so
+            // user cannot move the pitch outside the neighbour boundaries.
+            const frequency = Math.min(Math.max(centsToFreq(cents), min), max);
+            sliderEl.value = frequency;
+            applyFrequency(frequency);
         };
 
         docById("done").onclick = function () {
@@ -620,6 +669,29 @@ function TemperamentWidget() {
             that.createMainWheel();
             docById("noteInfo").remove();
         };
+    };
+
+    /**
+     * Converts a frequency (Hz) to cents offset relative to a base frequency.
+     * 0 cents means the frequency equals the base; +1200 is one octave up;
+     * +100 is one semitone up.
+     * @param {number} freq - The frequency in Hz.
+     * @param {number} baseFreq - The reference frequency in Hz.
+     * @returns {number} The cents offset from base.
+     */
+    this._freqToCents = function (freq, baseFreq) {
+        return 1200 * Math.log2(freq / baseFreq);
+    };
+
+    /**
+     * Converts a cents offset back to an absolute frequency in Hz relative
+     * to a base frequency.
+     * @param {number} cents - The cents offset from base.
+     * @param {number} baseFreq - The reference frequency in Hz.
+     * @returns {number} The resulting frequency in Hz.
+     */
+    this._centsToFreq = function (cents, baseFreq) {
+        return baseFreq * Math.pow(2, cents / 1200);
     };
 
     /**
